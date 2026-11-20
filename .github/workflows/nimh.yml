@@ -1,0 +1,19 @@
+# Сваля данните на НИМХ Варна (varna.meteo.bg) в nimh.json на всеки час
+name: nimh
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/nimh.py nimh.json
+      - run: |
+          git config user.name 'nimh-bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add nimh.json
+          git diff --cached --quiet || git commit -m 'НИМХ Варна: нови данни' && git push

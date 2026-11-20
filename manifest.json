@@ -1,0 +1,17 @@
+{
+  "name": "Риболов днес · Варна",
+  "short_name": "Риболов",
+  "description": "Какво, къде, с какво и как да ловиш от брега във Варна днес",
+  "lang": "bg",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#04202b",
+  "theme_color": "#062a3c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
