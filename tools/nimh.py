@@ -33,6 +33,27 @@ v = next((x for x in stations if x['name'] == 'Варна'), None)
 if v: out['varna'] = v
 if not stations and 'sea' not in out:
     sys.exit('nothing parsed: the page has changed')
+# the NIMH buoy in Varna bay (sea.meteo-varna.net): measured waves, period, water and wind, the last ~2 days (times in UTC)
+def num(x):
+    m = re.search(r'-?\d+(?:\.\d+)?', x or '')
+    return float(m.group()) if m else None
+try:
+    bs = urllib.request.urlopen(urllib.request.Request('http://sea.meteo-varna.net/', headers={'User-Agent': 'ribolov-dnes/1.0'}), timeout=30).read().decode('utf-8', errors='replace')
+    cells = [re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', c))).strip() for c in re.findall(r'<td[^>]*>(.*?)(?=<td|</tr|</table)', bs, flags=re.S | re.I)]
+    hist = []
+    for k, c in enumerate(cells):
+        if c != 'Варна-залив' or k + 10 >= len(cells): continue
+        r = cells[k:k + 11]
+        m = re.match(r'(\d{2})/(\d{2})/(\d{4}) (\d{2}):(\d{2})', r[1])
+        if not m: continue
+        hist.append({'t': f'{m.group(3)}-{m.group(2)}-{m.group(1)}T{m.group(4)}:{m.group(5)}Z', 'hs': num(r[2].split('/')[0]), 'dir': num(r[3]), 'per': num(r[5]),
+                     'sst': num(r[8]), 'wind': num(r[9].split('/')[0]), 'wdir': num(r[10])})
+    hist.sort(key=lambda x: x['t'])
+    if hist:
+        out['buoy'] = hist[-1]
+        out['buoyHist'] = [{'t': x['t'], 'hs': x['hs'], 'sst': x['sst']} for x in hist[-60:]]
+except Exception as e:
+    print('buoy:', e)
 path = sys.argv[1] if len(sys.argv) > 1 else 'nimh.json'
 try:  # nothing new: keep the old file, so there is no commit (and no Pages rebuild) every hour
     old = json.load(open(path, encoding='utf-8'))
