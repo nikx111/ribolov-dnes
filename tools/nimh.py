@@ -55,6 +55,45 @@ try:
 except Exception as e:
     print('buoy:', e)
 path = sys.argv[1] if len(sys.argv) > 1 else 'nimh.json'
+# ---- checking the forecast against the buoy. Each run keeps the model's waves and water for the next 24 h; when an hour
+# comes round it is compared with what the buoy measured. The median error of the last 7 days goes to the app, which
+# corrects the forecast with it. "lead0" is the model for the hour itself, "lead24" what it said a day before.
+try:
+    prev = json.load(open(path, encoding='utf-8'))
+except (OSError, ValueError):
+    prev = {}
+ver = prev.get('verify', {'pred': {}, 'pairs': []})
+try:
+    m = json.load(urllib.request.urlopen('https://marine-api.open-meteo.com/v1/marine?latitude=43.19&longitude=27.97&hourly=wave_height,sea_surface_temperature&past_days=1&forecast_days=2&timezone=GMT', timeout=40))
+    hh = m['hourly']; now = datetime.now(timezone.utc)
+    model = {t + 'Z': (w, st) for t, w, st in zip(hh['time'], hh['wave_height'], hh['sea_surface_temperature'])}
+    for t, (w, st) in model.items():  # remember what is forecast 20-28 h ahead, once per hour
+        dt = (datetime.fromisoformat(t.replace('Z', '+00:00')) - now).total_seconds() / 3600
+        if 20 <= dt <= 28 and t not in ver['pred']:
+            ver['pred'][t] = [w, st]
+    seen = {p['t'] for p in ver['pairs']}
+    for b in out.get('buoyHist', []):
+        t = b['t'][:13] + ':00Z'
+        if t in seen or b.get('hs') is None or t not in model: continue
+        w0, s0 = model[t]; p24 = ver['pred'].get(t)
+        ver['pairs'].append({'t': t, 'hs': b['hs'], 'sst': b.get('sst'), 'w0': w0, 's0': s0, 'w24': p24[0] if p24 else None, 's24': p24[1] if p24 else None})
+    cut = (now.timestamp() - 7 * 86400)
+    ver['pairs'] = [p for p in ver['pairs'] if datetime.fromisoformat(p['t'].replace('Z', '+00:00')).timestamp() > cut][-400:]
+    ver['pred'] = {t: v for t, v in ver['pred'].items() if datetime.fromisoformat(t.replace('Z', '+00:00')).timestamp() > now.timestamp() - 86400}
+    def med(xs):
+        xs = sorted(x for x in xs if x is not None)
+        return round(xs[len(xs) // 2], 2) if xs else None
+    def mae(xs):
+        xs = [abs(x) for x in xs if x is not None]
+        return round(sum(xs) / len(xs), 2) if xs else None
+    P = ver['pairs']
+    d = lambda a, b: [p[a] - p[b] if p.get(a) is not None and p.get(b) is not None else None for p in P]
+    ver['bias'] = {'n': len(P), 'n24': sum(1 for p in P if p.get('w24') is not None),
+                   'wave0': med(d('hs', 'w0')), 'wave24': med(d('hs', 'w24')), 'waveErr24': mae(d('hs', 'w24')), 'waveErr0': mae(d('hs', 'w0')),
+                   'sst0': med(d('sst', 's0')), 'sst24': med(d('sst', 's24'))}
+except Exception as e:
+    print('verify:', e)
+out['verify'] = ver
 try:  # nothing new: keep the old file, so there is no commit (and no Pages rebuild) every hour
     old = json.load(open(path, encoding='utf-8'))
     if {k: v for k, v in old.items() if k != 'at'} == {k: v for k, v in out.items() if k != 'at'}:
