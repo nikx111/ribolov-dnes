@@ -1,5 +1,5 @@
 // Риболов днес: works offline. The app shell is cached; the sea data always comes from the network when there is one.
-const V = 'rv-mwt3j9gr', SHELL = ['./', 'index.html', 'manifest.json', 'icon.svg', 'icon-180.png', 'icon-512.png', ...['lefer', 'zargan', 'safrid', 'palamud', 'lavrak', 'karagyoz', 'popche', 'skorpid', 'kefal', 'vrana', 'kalkan'].map((k) => 'fish/' + k + '.jpg')];
+const V = 'rv-mwt85yzg', SHELL = ['./', 'index.html', 'manifest.json', 'icon.svg', 'icon-180.png', 'icon-512.png', ...['lefer', 'zargan', 'safrid', 'palamud', 'lavrak', 'karagyoz', 'popche', 'skorpid', 'kefal', 'vrana', 'kalkan'].map((k) => 'fish/' + k + '.jpg')];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(V).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== V).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
