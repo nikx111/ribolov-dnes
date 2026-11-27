@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
+  repository_dispatch:
+    types: [nimh]   # cron-job.org calls this every hour: GitHub's own schedule runs only a few times a day
+concurrency: nimh
 permissions:
   contents: write
 jobs:
