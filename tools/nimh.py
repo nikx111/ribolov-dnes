@@ -93,6 +93,41 @@ try:
                    'sst0': med(d('sst', 's0')), 'sst24': med(d('sst', 's24'))}
 except Exception as e:
     print('verify:', e)
+# ---- the same for the air: Varna airport (METAR LBWN, a real wind gauge and thermometer) against the model for the city
+# point the app uses. The bay buoy's wind is worked out from the waves (its direction is always the wave direction),
+# so it is not used as the truth for the wind.
+try:
+    ver.setdefault('apairs', []); ver.setdefault('predA', {})
+    hrs = 48 if not ver['apairs'] else 12
+    met = json.load(urllib.request.urlopen(urllib.request.Request(f'https://aviationweather.gov/api/data/metar?ids=LBWN&format=json&hours={hrs}', headers={'User-Agent': 'ribolov-dnes/1.0'}), timeout=40))
+    fa = json.load(urllib.request.urlopen('https://api.open-meteo.com/v1/forecast?latitude=43.2&longitude=27.92&hourly=temperature_2m,wind_speed_10m&past_days=2&forecast_days=2&timezone=GMT&wind_speed_unit=ms', timeout=40))
+    ha = fa['hourly']; now = datetime.now(timezone.utc)
+    amodel = {t + 'Z': (ta, ws) for t, ta, ws in zip(ha['time'], ha['temperature_2m'], ha['wind_speed_10m'])}
+    for t, v2 in amodel.items():
+        dt = (datetime.fromisoformat(t.replace('Z', '+00:00')) - now).total_seconds() / 3600
+        if 20 <= dt <= 28 and t not in ver['predA']: ver['predA'][t] = list(v2)
+    seenA = {p['t'] for p in ver['apairs']}
+    for m in met:
+        rt = (m.get('reportTime') or '')
+        if rt[14:16] != '00' or m.get('temp') is None: continue
+        t = rt[:13] + ':00Z'
+        if t in seenA or t not in amodel: continue
+        ws = m.get('wspd') if isinstance(m.get('wspd'), (int, float)) else None
+        a0 = amodel[t]; a24 = ver['predA'].get(t)
+        ver['apairs'].append({'t': t, 'ta': m['temp'], 'ws': round(ws * 0.5144, 1) if ws is not None else None, 't0': a0[0], 'f0': a0[1],
+                              't24': a24[0] if a24 else None, 'f24': a24[1] if a24 else None})
+        seenA.add(t)
+    cut = now.timestamp() - 7 * 86400
+    ver['apairs'] = sorted([p for p in ver['apairs'] if datetime.fromisoformat(p['t'].replace('Z', '+00:00')).timestamp() > cut], key=lambda p: p['t'])[-400:]
+    ver['predA'] = {t: v2 for t, v2 in ver['predA'].items() if datetime.fromisoformat(t.replace('Z', '+00:00')).timestamp() > now.timestamp() - 86400}
+    A = ver['apairs']
+    da = lambda a, b: [p[a] - p[b] if p.get(a) is not None and p.get(b) is not None else None for p in A]
+    ver.setdefault('bias', {}).update({'nA': len(A), 'nA24': sum(1 for p in A if p.get('t24') is not None),
+        'windA0': med(da('ws', 'f0')), 'windA24': med(da('ws', 'f24')), 'windErrA0': mae(da('ws', 'f0')), 'windErrA24': mae(da('ws', 'f24')),
+        'temp0': med(da('ta', 't0')), 'temp24': med(da('ta', 't24')), 'tempErr0': mae(da('ta', 't0')), 'tempErr24': mae(da('ta', 't24')),
+        'sstErr0': mae(d('sst', 's0')), 'sstErr24': mae(d('sst', 's24'))})
+except Exception as e:
+    print('verify air:', e)
 out['verify'] = ver
 try:  # nothing new: keep the old file, so there is no commit (and no Pages rebuild) every hour
     old = json.load(open(path, encoding='utf-8'))
